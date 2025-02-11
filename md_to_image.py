@@ -52,11 +52,17 @@ def md_to_images(md_file):
     cover, sections = parse_markdown(md_file)
     
     with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport=CONFIG['image_size'])
+        # 修改这里：添加参数以允许访问本地文件
+        browser = p.chromium.launch(args=['--allow-file-access-from-files'])
+        # 创建上下文时添加权限
+        context = browser.new_context(
+            viewport=CONFIG['image_size'],
+            bypass_csp=True  # 绕过内容安全策略
+        )
+        page = context.new_page()
         
         # 生成封面图片
-        cover_html = generate_html(cover)  # 使用与内容相同的HTML生成函数
+        cover_html = generate_html(cover)
         page.set_content(cover_html)
         page.wait_for_load_state('networkidle')
         page.screenshot(path=os.path.join(CONFIG['output_dir'], "cover.png"), full_page=True)
@@ -129,6 +135,27 @@ def generate_cover_html(content):
     """
 
 def generate_html(content):
+    # 添加图片路径处理
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # 替换 Markdown 中的图片相对路径为绝对路径
+    def replace_image_path(match):
+        img_alt = match.group(1)
+        img_path = match.group(2)
+        if img_path.startswith('./'):
+            img_path = img_path[2:]
+        # 使用 data URL 方式嵌入图片
+        abs_path = os.path.join(base_dir, img_path)
+        if os.path.exists(abs_path):
+            with open(abs_path, 'rb') as img_file:
+                import base64
+                img_data = base64.b64encode(img_file.read()).decode('utf-8')
+                img_ext = os.path.splitext(img_path)[1][1:]  # 获取文件扩展名（去掉点）
+                return f'![{img_alt}](data:image/{img_ext};base64,{img_data})'
+        return f'![{img_alt}]({img_path})'  # 如果文件不存在，保持原路径
+    
+    content = re.sub(r'!\[(.*?)\]\((\.?/?.*?)\)', replace_image_path, content)
+    
     formatter = HtmlFormatter(style=CONFIG['theme']['code_theme'])
     css_code = formatter.get_style_defs('.highlight')
     
@@ -151,7 +178,7 @@ def generate_html(content):
                 display: flex;
                 justify-content: center;
                 align-items: center;
-                font-size: 22px;  /* 再次增大字体大小 */
+                font-size: 28px;  /* 再次增大字体大小 */
             }}
             
             .content {{
@@ -165,28 +192,28 @@ def generate_html(content):
                 width: 100%;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
-                font-size: 22px;  /* 再次增大字体大小 */
+                font-size: 28px;  /* 再次增大字体大小 */
             }}
             
             /* 标题样式增强 */
             h1, h2 {{
-                font-size: 52px !important;  /* 再次增大字体大小 */
+                font-size: 62px !important;  /* 再次增大字体大小 */
             }}
             
             h3 {{
-                font-size: 40px !important;  /* 再次增大字体大小 */
+                font-size: 42px !important;  /* 再次增大字体大小 */
             }}
             
             h4 {{
-                font-size: 34px !important;  /* 再次增大字体大小 */
+                font-size: 38px !important;  /* 再次增大字体大小 */
             }}
             
             h5 {{
-                font-size: 28px !important;  /* 再次增大字体大小 */
+                font-size: 30px !important;  /* 再次增大字体大小 */
             }}
             
             h6 {{
-                font-size: 26px !important;  /* 再次增大字体大小 */
+                font-size: 28px !important;  /* 再次增大字体大小 */
             }}
             
             /* Carbon-style window controls */
@@ -331,57 +358,25 @@ def generate_html(content):
             
             /* Enhanced code blocks */
             pre {{ 
-                padding: 25px;
-                border-radius: 12px;
-                overflow-x: auto;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }}
-            
-            /* Add subtle animation for hover effects */
-            pre:hover {{
-                border-color: rgba(126, 196, 255, 0.3);
-                transition: all 0.3s ease;
-            }}
-            
-            /* Carbon-style code blocks */
-            .code-wrapper {{
-                position: relative;
-                margin: 2em 0;
-            }}
-            
-            .window-controls {{
-                position: absolute;
-                top: 12px;
-                left: 16px;
-                height: 12px;
-                width: 52px;
-                display: flex;
-                gap: 8px;
-            }}
-            
-            .window-control {{
-                width: 12px;
-                height: 12px;
-                border-radius: 50%;
-            }}
-            
-            .window-control.close {{ background: #ff5f56; }}
-            .window-control.minimize {{ background: #ffbd2e; }}
-            .window-control.maximize {{ background: #27c93f; }}
-            
-            pre {{
-                position: relative;
                 padding: {CONFIG['theme']['carbon_style']['padding']};
                 padding-top: 56px;
                 border-radius: {CONFIG['theme']['carbon_style']['border_radius']};
                 background: #1a1b1f;
                 box-shadow: {CONFIG['theme']['carbon_style']['shadow']};
                 margin: 2em 0;
+                font-size: 24px !important;
+                position: relative;  /* 添加这行 */
+                overflow: hidden;    /* 添加这行 */
             }}
             
+            .highlight {{
+                padding: 0;
+                margin: 0;
+                background: transparent;
+            }}
             code {{
-                font-family: 'JetBrains Mono', monospace;
-                font-size: 14px;
+                font-family: "JetBrains Mono", monospace;
+                font-size: 24px !important;
                 line-height: 1.5;
             }}
             
@@ -436,4 +431,4 @@ def generate_html(content):
     """
 
 if __name__ == "__main__":
-    md_to_images("/Users/ht/VSCode/mdTnpg/technical_notes.md")
+    md_to_images("./technical_notes.md")
