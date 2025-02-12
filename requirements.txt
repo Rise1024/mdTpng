@@ -1,0 +1,5 @@
+markdown
+pygments
+playwright
+markdown-it-py
+mdit-py-plugins
