@@ -34,13 +34,12 @@ def parse_markdown(filename):
     with open(filename, 'r') as f:
         content = f.read()
     
-    # 按一级标题分割内容，第一部分作为封面
+    # 提取一级标题及其内容
     sections = re.split(r'(?=\n#\s+)', content)
     cover = sections[0].strip() if sections else ""
     
-    # 确保封面包含第一个一级标题及其内容
-    if len(sections) > 1:
-        cover = sections[0] + sections[1]
+    # 提取整个内容中的二级标题及其内容
+    cover += ''.join(re.findall(r'(?=\n##\s+).*?(?=\n##\s+|$)', content, re.DOTALL))
     
     # 按二级标题分割内容
     content_sections = re.split(r'(?=\n##\s+)', content)
@@ -63,14 +62,14 @@ def md_to_images(md_file):
         
         # 生成封面图片
         cover_html = generate_html(cover)
-        page.set_content(cover_html)
+        page.set_content(cover_html, timeout=60000)  # 增加超时时间到60秒
         page.wait_for_load_state('networkidle')
         page.screenshot(path=os.path.join(CONFIG['output_dir'], "cover.png"), full_page=True)
         
         # 生成内容图片
         for i, section in enumerate(sections):
             html = generate_html(section)
-            page.set_content(html)
+            page.set_content(html, timeout=60000)  # 增加超时时间到60秒
             page.wait_for_load_state('networkidle')
             
             # Get the actual content height
@@ -124,10 +123,19 @@ def generate_cover_html(content):
                 text-align: center;
                 text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
             }}
+            .cover-subtitle {{
+                font-size: 48px;  /* 放大二级标题 */
+                text-align: center;
+                text-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+                margin-top: 20px;
+            }}
         </style>
     </head>
     <body>
         <div class="cover-title">
+            {markdown(content, extensions=['fenced_code', 'codehilite', 'tables'])}
+        </div>
+        <div class="cover-subtitle">
             {markdown(content, extensions=['fenced_code', 'codehilite', 'tables'])}
         </div>
     </body>
@@ -301,9 +309,9 @@ def generate_html(content):
             }}
             /* Watermark style */
             .watermark {{
-                position: fixed;
-                bottom: 30px;
-                right: 40px;
+                position: absolute;  // 修改为绝对定位
+                bottom: 10px;  // 调整位置到content的底部
+                right: 20px;  // 调整位置到content的右侧
                 font-size: 14px;
                 opacity: 0.5;
                 color: #7ec4ff;
@@ -409,10 +417,10 @@ def generate_html(content):
         </div>
         <div class="outer-container">
             <div class="content">
+                <div class="watermark">{CONFIG['theme']['watermark']}</div>
                 {markdown(content, extensions=['fenced_code', 'codehilite', 'tables'])}
             </div>
         </div>
-        <div class="watermark">{CONFIG['theme']['watermark']}</div>
         <script>
             // 为所有代码块添加窗口控制按钮
             document.querySelectorAll('pre').forEach(pre => {{
