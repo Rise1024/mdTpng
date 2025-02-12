@@ -6,10 +6,11 @@ from pygments.formatters import HtmlFormatter
 import os
 import re
 from playwright.sync_api import sync_playwright
+from markdown_it import MarkdownIt
+from mdit_py_plugins.footnote import footnote_plugin
+from mdit_py_plugins.tasklists import tasklists_plugin
 
 # 配置参数
-# Update CONFIG with new styling parameters
-# Update CONFIG with carbon_style settings
 CONFIG = {
     "output_dir": "output_images",  # 输出图片的目录
     "image_size": {"width": 1080, "height": 1920},  # 图片的宽度和高度
@@ -61,10 +62,10 @@ def md_to_images(md_file):
         page = context.new_page()
         
         # 生成封面图片
-        cover_html = generate_html(cover)
-        page.set_content(cover_html, timeout=60000)  # 增加超时时间到60秒
-        page.wait_for_load_state('networkidle')
-        page.screenshot(path=os.path.join(CONFIG['output_dir'], "cover.png"), full_page=True)
+        # cover_html = generate_html(cover)
+        # page.set_content(cover_html, timeout=60000)  # 增加超时时间到60秒
+        # page.wait_for_load_state('networkidle')
+        # page.screenshot(path=os.path.join(CONFIG['output_dir'], "cover.png"), full_page=True)
         
         # 生成内容图片
         for i, section in enumerate(sections):
@@ -100,6 +101,8 @@ def md_to_images(md_file):
 
 def generate_cover_html(content):
     """生成封面HTML"""
+    md = MarkdownIt().use(footnote_plugin).use(tasklists_plugin)
+    html_content = md.render(content)
     return f"""
     <!DOCTYPE html>
     <html>
@@ -133,10 +136,10 @@ def generate_cover_html(content):
     </head>
     <body>
         <div class="cover-title">
-            {markdown(content, extensions=['fenced_code', 'codehilite', 'tables'])}
+            {html_content}
         </div>
         <div class="cover-subtitle">
-            {markdown(content, extensions=['fenced_code', 'codehilite', 'tables'])}
+            {html_content}
         </div>
     </body>
     </html>
@@ -145,6 +148,9 @@ def generate_cover_html(content):
 def generate_html(content):
     # 添加图片路径处理
     base_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # 去除代码块标记符号前的空格
+    # content = re.sub(r'^\s*```', '```', content, flags=re.MULTILINE)
     
     # 替换 Markdown 中的图片相对路径为绝对路径
     def replace_image_path(match):
@@ -163,6 +169,19 @@ def generate_html(content):
         return f'![{img_alt}]({img_path})'  # 如果文件不存在，保持原路径
     
     content = re.sub(r'!\[(.*?)\]\((\.?/?.*?)\)', replace_image_path, content)
+    
+    # 使用 MarkdownIt 渲染 Markdown
+    md = MarkdownIt().use(footnote_plugin).use(tasklists_plugin)
+    html_content = md.render(content)
+    
+    # 使用 Pygments 为代码块添加语法高亮
+    def highlight_code(match):
+        code = match.group(1)
+        lexer = get_lexer_by_name("python", stripall=True)
+        formatter = HtmlFormatter(style=CONFIG['theme']['code_theme'])
+        return highlight(code, lexer, formatter)
+    
+    html_content = re.sub(r'<pre><code>(.*?)</code></pre>', highlight_code, html_content, flags=re.DOTALL)
     
     formatter = HtmlFormatter(style=CONFIG['theme']['code_theme'])
     css_code = formatter.get_style_defs('.highlight')
@@ -200,8 +219,23 @@ def generate_html(content):
                 width: 100%;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
-                font-size: 28px;  /* 再次增大字体大小 */
+                font-size: 30px;  /* 再次增大字体大小 */
             }}
+            
+            /* 链接高亮 */
+            a {{
+                color: #ff6347;  /* 链接颜色 */
+                text-decoration: none;
+                border-bottom: 1px dashed rgba(126, 196, 255, 0.4);
+                transition: all 0.3s ease;
+            }}
+            
+            a:hover {{
+                border-bottom-color: #ff6347;
+            }}
+            
+            /* 代码块高亮 */
+            {css_code}
             
             /* 标题样式增强 */
             h1, h2 {{
@@ -264,18 +298,18 @@ def generate_html(content):
             }}
             
             h2 {{
-                font-size: 36px !important;
+                font-size: 42px !important;
                 border-bottom: 2px solid #3f72af;
                 padding-bottom: 12px;
             }}
             
             h3 {{
-                font-size: 30px !important;
+                font-size: 36px !important;
                 color: #6db4ff;
             }}
             
             h4 {{
-                font-size: 24px !important;
+                font-size: 30px !important;
                 color: #5ba8ff;
             }}
             
@@ -294,7 +328,6 @@ def generate_html(content):
                 transform: translateX(5px);
                 transition: transform 0.3s ease;
             }}
-            {css_code}
             /* Decorative elements */
             .content::before {{
                 content: '';
@@ -322,7 +355,7 @@ def generate_html(content):
                 color: #7ec4ff;
                 border-bottom: 2px solid #3f72af;
                 padding-bottom: 12px;
-                font-size: 32px !important;
+                font-size: 42px !important;
                 margin-top: 0;
                 letter-spacing: 1px;
                 text-shadow: 0 2px 4px rgba(0,0,0,0.2);
@@ -375,6 +408,13 @@ def generate_html(content):
                 font-size: 24px !important;
                 position: relative;  /* 添加这行 */
                 overflow: hidden;    /* 添加这行 */
+                white-space: pre-wrap;  /* 自动换行 */
+                word-wrap: break-word;  /* 自动换行 */
+            }}
+
+            p {{
+                white-space: pre-wrap;  /* 自动换行 */
+                word-wrap: break-word;  /* 自动换行 */
             }}
             
             .highlight {{
@@ -383,10 +423,11 @@ def generate_html(content):
                 background: transparent;
             }}
             code {{
-                font-family: "JetBrains Mono", monospace;
-                font-size: 24px !important;
-                line-height: 1.5;
-            }}
+                 font-family: "JetBrains Mono", monospace;
+                 font-size: 30px !important;
+                 line-height: 1.5;
+                 color: #339966;  /* 添加字体颜色 */
+             }}
             
             /* 增强图片样式 */
             img {{
@@ -394,18 +435,6 @@ def generate_html(content):
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
                 max-width: 100%;
                 height: auto;
-            }}
-            
-            /* 增强链接样式 */
-            a {{
-                color: #7ec4ff;
-                text-decoration: none;
-                border-bottom: 1px dashed rgba(126, 196, 255, 0.4);
-                transition: all 0.3s ease;
-            }}
-            
-            a:hover {{
-                border-bottom-color: #7ec4ff;
             }}
         </style>
     </head>
@@ -418,7 +447,7 @@ def generate_html(content):
         <div class="outer-container">
             <div class="content">
                 <div class="watermark">{CONFIG['theme']['watermark']}</div>
-                {markdown(content, extensions=['fenced_code', 'codehilite', 'tables'])}
+                {html_content}
             </div>
         </div>
         <script>
